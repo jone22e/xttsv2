@@ -6,8 +6,9 @@ Projeto Docker para gerar audio a partir de texto usando um WAV de referencia co
 - Porta `3199`
 - Usa GPU NVIDIA quando voce subir o servico `xtts-api-gpu`
 - Usa CPU quando voce subir o servico `xtts-api-cpu`
-- Endpoint HTTP simples para enviar `text` e, opcionalmente, `speaker_wav`
-- Usa `app/audio.wav` como voz de referencia padrao quando `speaker_wav` nao for enviado
+- Endpoint HTTP simples para enviar `text`, `voz` e, opcionalmente, `speaker_wav`
+- Usa `app/audio.wav` com `voz=m` e `app/feminina.wav` com `voz=f`
+- Nao carrega o modelo no startup por padrao; defina `PRELOAD_MODEL=1` se quiser preload
 - Idioma padrao: `pt`
 
 ## Licenca do modelo
@@ -32,20 +33,29 @@ docker compose up -d xtts-api-gpu
 curl http://localhost:3199/health
 ```
 
+Com `PRELOAD_MODEL=0`, `loaded` fica `false` ate a primeira chamada em `/tts`.
+
 ### Gerar audio com WAV de referencia
 ```bash
 curl -X POST http://localhost:3199/tts \
   -F "text=Ola Jone, este audio foi gerado com voz de referencia." \
-  -F "language=pt" \
   -F "speaker_wav=@referencia.wav" \
   --output saida.wav
 ```
 
-### Gerar audio com a voz de referencia padrao
+### Gerar audio com voz masculina
 ```bash
 curl -X POST http://localhost:3199/tts \
-  -F "text=Ola Jone, este audio foi gerado com a voz padrao." \
-  -F "language=pt" \
+  -F "text=Ola Jone, este audio foi gerado com a voz masculina." \
+  -F "voz=m" \
+  --output saida.wav
+```
+
+### Gerar audio com voz feminina
+```bash
+curl -X POST http://localhost:3199/tts \
+  -F "text=Ola Jone, este audio foi gerado com a voz feminina." \
+  -F "voz=f" \
   --output saida.wav
 ```
 
@@ -59,8 +69,9 @@ Retorna status, device e se o modelo foi carregado.
 ### `POST /tts`
 Campos multipart:
 - `text`: texto para falar
-- `language`: idioma do texto, ex.: `pt`, `en`, `es`
-- `speaker_wav`: arquivo de referencia da voz. Opcional; se nao for enviado, a API usa `app/audio.wav`
+- `language`: idioma do texto, ex.: `pt`, `en`, `es`. Opcional; padrao `pt`
+- `voz`: `m` para `app/audio.wav` ou `f` para `app/feminina.wav`. Opcional; padrao `m`
+- `speaker_wav`: arquivo de referencia da voz. Opcional; se enviado, tem prioridade sobre `voz`
 
 Resposta:
 - arquivo WAV gerado
@@ -97,8 +108,7 @@ curl -X POST http://localhost:3199/tts \
   -F "speaker_wav=@referencia.wav" \
   --output saida.wav
 
-curl -X POST http://localhost:3199/tts \
+curl -X POST http://177.73.186.237:3199/tts \
   -F "text=Ola Jone, este audio foi gerado com a voz padrao." \
   -F "language=pt" \
   --output saida.wav
-

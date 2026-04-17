@@ -1,3 +1,4 @@
+import logging
 import os
 import shutil
 import tempfile
@@ -10,14 +11,33 @@ from fastapi.responses import FileResponse, JSONResponse
 from TTS.api import TTS
 
 os.environ.setdefault("COQUI_TOS_AGREED", "1")
+APP_DIR = Path(__file__).parent
 MODEL_NAME = os.getenv("MODEL_NAME", "tts_models/multilingual/multi-dataset/xtts_v2")
 DEVICE_ENV = os.getenv("DEVICE", "auto").strip().lower()
 PORT = int(os.getenv("PORT", "3199"))
 TMP_DIR = Path(os.getenv("TMP_DIR", "/tmp/xtts-api"))
 TMP_DIR.mkdir(parents=True, exist_ok=True)
-DEFAULT_SPEAKER_WAV = Path(
-    os.getenv("DEFAULT_SPEAKER_WAV", str(Path(__file__).with_name("audio.wav")))
+MALE_SPEAKER_WAV = Path(
+    os.getenv(
+        "MALE_SPEAKER_WAV",
+        os.getenv("DEFAULT_SPEAKER_WAV", str(APP_DIR / "audio.wav")),
+    )
 )
+FEMALE_SPEAKER_WAV = Path(
+    os.getenv("FEMALE_SPEAKER_WAV", str(APP_DIR / "feminina.wav"))
+)
+VOICE_REFERENCE_WAVS = {
+    "m": MALE_SPEAKER_WAV,
+    "f": FEMALE_SPEAKER_WAV,
+}
+PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
+
+logger = logging.getLogger("xtts-api")
 
 app = FastAPI(title="XTTS Voice Clone API", version="1.0.0")
 
@@ -37,18 +57,39 @@ def get_tts() -> TTS:
     global _tts, _device
     if _tts is None:
         _device = resolve_device()
-        _tts = TTS(MODEL_NAME).to(_device)
+        logger.info("Loading TTS model %s on %s", MODEL_NAME, _device)
+        try:
+            _tts = TTS(MODEL_NAME).to(_device)
+        except SystemExit as exc:
+            raise RuntimeError(
+                f"Falha ao carregar modelo TTS: processo tentou sair com codigo {exc.code}"
+            ) from exc
+        logger.info("TTS model loaded on %s", _device)
     return _tts
 
 
-def get_reference_wav(speaker_wav: Optional[UploadFile], workdir: Path) -> Path:
+def get_reference_wav(
+    speaker_wav: Optional[UploadFile],
+    workdir: Path,
+    voz: str,
+) -> Path:
     if speaker_wav is None:
-        if not DEFAULT_SPEAKER_WAV.exists():
+        selected_voice = (voz or "m").strip().lower()
+        reference_wav = VOICE_REFERENCE_WAVS.get(selected_voice)
+        if reference_wav is None:
+            raise HTTPException(
+                status_code=400,
+                detail="O campo voz deve ser 'm' ou 'f'.",
+            )
+        if not reference_wav.exists():
             raise HTTPException(
                 status_code=500,
-                detail=f"Audio de referencia padrao nao encontrado: {DEFAULT_SPEAKER_WAV}",
+                detail=(
+                    f"Audio de referencia para voz '{selected_voice}' "
+                    f"nao encontrado: {reference_wav}"
+                ),
             )
-        return DEFAULT_SPEAKER_WAV
+        return reference_wav
 
     suffix = Path(speaker_wav.filename or "ref.wav").suffix or ".wav"
     reference_path = workdir / f"reference{suffix}"
@@ -59,7 +100,15 @@ def get_reference_wav(speaker_wav: Optional[UploadFile], workdir: Path) -> Path:
 
 @app.on_event("startup")
 def startup_event() -> None:
-    get_tts()
+    logger.info(
+        "Starting XTTS API with voice references %s",
+        {
+            voice: {"path": str(path), "exists": path.exists()}
+            for voice, path in VOICE_REFERENCE_WAVS.items()
+        },
+    )
+    if PRELOAD_MODEL:
+        get_tts()
 
 
 @app.get("/")
@@ -70,7 +119,10 @@ def root() -> dict:
         "model": MODEL_NAME,
         "device": _device or resolve_device(),
         "port": PORT,
-        "default_speaker_wav": str(DEFAULT_SPEAKER_WAV),
+        "voice_reference_wavs": {
+            voice: str(path) for voice, path in VOICE_REFERENCE_WAVS.items()
+        },
+        "preload_model": PRELOAD_MODEL,
         "endpoints": {
             "health": "/health",
             "tts": "/tts",
@@ -86,7 +138,11 @@ def health() -> dict:
         "model": MODEL_NAME,
         "device": _device or resolve_device(),
         "cuda_available": torch.cuda.is_available(),
-        "default_speaker_wav_exists": DEFAULT_SPEAKER_WAV.exists(),
+        "voice_reference_wavs": {
+            voice: {"path": str(path), "exists": path.exists()}
+            for voice, path in VOICE_REFERENCE_WAVS.items()
+        },
+        "preload_model": PRELOAD_MODEL,
     }
 
 
@@ -94,6 +150,7 @@ def health() -> dict:
 async def generate_tts(
     text: str = Form(...),
     language: str = Form("pt"),
+    voz: str = Form("m"),
     speaker_wav: Optional[UploadFile] = File(None),
 ) -> FileResponse:
     cleaned_text = text.strip()
@@ -104,7 +161,7 @@ async def generate_tts(
     output_path = workdir / "output.wav"
 
     try:
-        reference_path = get_reference_wav(speaker_wav, workdir)
+        reference_path = get_reference_wav(speaker_wav, workdir, voz)
 
         tts = get_tts()
         tts.tts_to_file(

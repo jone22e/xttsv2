@@ -59,6 +59,14 @@ curl -X POST http://localhost:3199/tts \
   --output saida.wav
 ```
 
+Para evitar salvar uma resposta de erro como `.wav`, use `-fS` nos testes:
+```bash
+curl -fS -X POST http://localhost:3199/tts \
+  -F "text=Ola Jone, teste com voz feminina." \
+  -F "voz=f" \
+  --output saida.wav
+```
+
 ## Endpoints
 ### `GET /`
 Retorna status da API.
@@ -100,15 +108,3 @@ Exemplos comuns:
 - Na primeira execucao o container vai baixar o modelo, entao demora mais.
 - O WAV de referencia deve ter voz limpa, sem musica, sem eco e de preferencia uma unica pessoa falando.
 - O servico GPU e CPU usam a mesma porta 3199. Suba apenas um dos dois.
-
-
-curl -X POST http://localhost:3199/tts \
-  -F "text=Olá Jone, este áudio foi gerado com voz de referência." \
-  -F "language=pt" \
-  -F "speaker_wav=@referencia.wav" \
-  --output saida.wav
-
-curl -X POST http://177.73.186.237:3199/tts \
-  -F "text=Ola Jone, este audio foi gerado com a voz padrao." \
-  -F "language=pt" \
-  --output saida.wav

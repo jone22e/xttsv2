@@ -36,6 +36,7 @@ PRELOAD_MODEL = os.getenv("PRELOAD_MODEL", "0").strip().lower() in {
     "yes",
     "on",
 }
+MIN_WAV_SIZE_BYTES = 44
 
 logger = logging.getLogger("xtts-api")
 
@@ -96,6 +97,27 @@ def get_reference_wav(
     with reference_path.open("wb") as f:
         shutil.copyfileobj(speaker_wav.file, f)
     return reference_path
+
+
+def validate_output_wav(output_path: Path) -> None:
+    if not output_path.exists():
+        raise HTTPException(status_code=500, detail="Falha ao gerar o audio.")
+
+    output_size = output_path.stat().st_size
+    if output_size <= MIN_WAV_SIZE_BYTES:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Audio gerado vazio ou incompleto ({output_size} bytes).",
+        )
+
+    with output_path.open("rb") as output_file:
+        header = output_file.read(12)
+
+    if len(header) < 12 or header[:4] != b"RIFF" or header[8:12] != b"WAVE":
+        raise HTTPException(
+            status_code=500,
+            detail="Audio gerado nao tem cabecalho WAV valido.",
+        )
 
 
 @app.on_event("startup")
@@ -171,8 +193,7 @@ async def generate_tts(
             file_path=str(output_path),
         )
 
-        if not output_path.exists():
-            raise HTTPException(status_code=500, detail="Falha ao gerar o audio.")
+        validate_output_wav(output_path)
 
         return FileResponse(
             path=str(output_path),

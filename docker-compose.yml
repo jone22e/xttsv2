@@ -8,6 +8,7 @@ services:
       PORT: "3199"
       DEVICE: "cpu"
       COQUI_TOS_AGREED: "1"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
       PRELOAD_MODEL: "0"
     ports:
       - "3199:3199"
@@ -25,6 +26,7 @@ services:
       PORT: "3199"
       DEVICE: "cuda"
       COQUI_TOS_AGREED: "1"
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
       PRELOAD_MODEL: "0"
     ports:
       - "3199:3199"

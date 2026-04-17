@@ -6,6 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PORT=3199 \
     DEVICE=auto \
     COQUI_TOS_AGREED=1 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
     PRELOAD_MODEL=0 \
     TMP_DIR=/tmp/xtts-api
 

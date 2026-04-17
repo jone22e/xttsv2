@@ -5,12 +5,15 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+# These must be set before importing torch/TTS because CUDA reads them early.
+os.environ.setdefault("COQUI_TOS_AGREED", "1")
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 import torch
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from TTS.api import TTS
 
-os.environ.setdefault("COQUI_TOS_AGREED", "1")
 APP_DIR = Path(__file__).parent
 MODEL_NAME = os.getenv("MODEL_NAME", "tts_models/multilingual/multi-dataset/xtts_v2")
 DEVICE_ENV = os.getenv("DEVICE", "auto").strip().lower()

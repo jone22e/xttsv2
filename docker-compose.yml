@@ -1,0 +1,37 @@
+services:
+  xtts-api-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xtts-api-cpu
+    environment:
+      PORT: "3199"
+      DEVICE: "cpu"
+      COQUI_TOS_AGREED: "1"
+    ports:
+      - "3199:3199"
+    volumes:
+      - xtts_models:/root/.local/share/tts
+      - xtts_cache:/root/.cache
+    restart: unless-stopped
+
+  xtts-api-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: xtts-api-gpu
+    environment:
+      PORT: "3199"
+      DEVICE: "cuda"
+      COQUI_TOS_AGREED: "1"
+    ports:
+      - "3199:3199"
+    volumes:
+      - xtts_models:/root/.local/share/tts
+      - xtts_cache:/root/.cache
+    gpus: all
+    restart: unless-stopped
+
+volumes:
+  xtts_models:
+  xtts_cache:
